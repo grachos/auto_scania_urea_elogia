@@ -1,0 +1,76 @@
+import { describe, it, expect, vi } from 'vitest';
+import { runReport } from '../src/runReport.js';
+import { memoryRepo } from '../src/db/repo.js';
+import type { VehicleReading } from '../src/sources/FleetSource.js';
+import { renderReport } from '../src/report/render.js';
+
+const now = new Date('2026-03-10T15:30:00Z'); // 10:30 Bogota
+const rd = (vin: string, lvl: number | null, at: string | null = '2026-03-10T15:00:00Z'): VehicleReading =>
+  ({ vin, plate: 'P' + vin, ureaLevel: lvl, fuelLevel: null, receivedAt: at, lat: null, lon: null, odometerM: null });
+const mkDeps = (readings: VehicleReading[] | Error, repo = memoryRepo(['db@example.com'])) => {
+  const sent: any[] = [];
+  return {
+    sent, repo,
+    deps: {
+      source: { fetchReadings: async () => { if (readings instanceof Error) throw readings; return readings; } },
+      repo, mailer: { send: async (m: any) => { sent.push(m); } },
+      thresholds: { critical: 20, low: 35 }, tz: 'America/Bogota', fallbackTo: ['fallback@example.com'], now: () => now, log: () => {},
+    },
+  };
+};
+
+describe('runReport', () => {
+  it('sends sorted report, stores readings, computes delta vs previous', async () => {
+    const m = mkDeps([rd('1', 50, '2026-03-10T15:00:00Z'), rd('2', 10), rd('3', null)]);
+    await m.repo.insertReadings([rd('2', 30, '2026-03-10T11:00:00Z')]);
+    const r = await runReport(m.deps);
+    expect(r.status).toBe('ok');
+    expect(m.sent).toHaveLength(1);
+    expect(m.sent[0].to).toEqual(['db@example.com']);
+    expect(m.sent[0].subject).toBe('[Urea Scania] 1 críticos / 0 bajos – 10/03 10:30');
+    expect(r.rows!.find((x) => x.vin === '2')!.delta).toBe(-20);
+    expect(m.repo.readings).toHaveLength(4); // 3 new + 1 earlier
+    const html = m.sent[0].html as string;
+    expect(html.indexOf('P2')).toBeLessThan(html.indexOf('P1'));
+    expect(html.indexOf('P1')).toBeLessThan(html.indexOf('P3'));
+  });
+  it('dry run prints html and does not send or persist', async () => {
+    const logs: string[] = [];
+    const m = mkDeps([rd('1', 10)]);
+    const r = await runReport({ ...m.deps, log: (s) => logs.push(s) }, { dryRun: true });
+    expect(r.status).toBe('ok');
+    expect(m.sent).toHaveLength(0);
+    expect(m.repo.readings).toHaveLength(0);
+    expect(logs.join('')).toContain('<table');
+  });
+  it('falls back to MAIL_TO when no recipients', async () => {
+    const m = mkDeps([rd('1', 10)], memoryRepo([]));
+    await runReport(m.deps);
+    expect(m.sent[0].to).toEqual(['fallback@example.com']);
+  });
+  it('sends an alert and records error when Scania fails', async () => {
+    const m = mkDeps(new Error('boom'));
+    const r = await runReport(m.deps);
+    expect(r.status).toBe('error');
+    expect(m.sent[0].subject).toContain('ERROR');
+    expect(m.repo.runs[0]).toMatchObject({ status: 'error', detail: 'boom' });
+  });
+  it('skips when a recent run is still running', async () => {
+    const m = mkDeps([rd('1', 10)]);
+    await m.repo.startRun(new Date(now.getTime() - 5 * 60000));
+    expect((await runReport(m.deps)).status).toBe('skipped');
+    expect(m.sent).toHaveLength(0);
+  });
+  it('ignores stale lock older than 10 minutes and duplicate readings', async () => {
+    const m = mkDeps([rd('1', 10)]);
+    await m.repo.startRun(new Date(now.getTime() - 11 * 60000));
+    expect((await runReport(m.deps)).status).toBe('ok');
+    await m.repo.insertReadings([rd('1', 10)]);
+    expect(m.repo.readings).toHaveLength(1);
+  });
+  it('renders sin dato and stale marker', () => {
+    const { html } = renderReport([{ plate: 'X', vin: 'V', level: null, status: 'SIN_DATO', delta: null, receivedAt: null, stale: true }], { now, tz: 'America/Bogota' });
+    expect(html).toContain('SIN_DATO');
+    expect(html).toContain('desactualizado');
+  });
+});

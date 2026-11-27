@@ -1,0 +1,3 @@
+# Hostinger VPS: every 4 hours (server time). Env vars live in /opt/auto_scania_urea_elogia/.env
+# Install deps once: npm ci && npm run build   (run script uses tsx: npm run report)
+0 */4 * * * cd /opt/auto_scania_urea_elogia && set -a && . ./.env && set +a && /usr/bin/npm run report >> /var/log/urea-report.log 2>&1
