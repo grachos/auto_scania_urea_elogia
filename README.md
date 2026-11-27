@@ -7,7 +7,7 @@ Reporte automático del nivel de urea (AdBlue) de la flota de camiones Scania.
 Cada 4 horas el proceso:
 
 1. Consulta la API oficial rFMS v4 de Scania y obtiene, para cada camión, el último snapshot (`snapshotData.catalystFuelLevel`, nivel de urea en %).
-2. Guarda el histórico en Supabase (tablas `vehicles` y `urea_readings`), si Supabase está configurado.
+2. Guarda el histórico en Supabase (tablas `urea_vehicles` y `urea_readings`), si Supabase está configurado.
 3. Clasifica cada camión según los umbrales configurados y envía un correo HTML a los destinatarios:
 
 | Estado | Condición (con valores por defecto) |
@@ -57,7 +57,7 @@ Plantilla completa en `.env.example` (solo contiene valores de ejemplo). Resumen
 | `SMTP_PORT` | No (`587`) | Puerto SMTP; con `465` la conexión es TLS directa. |
 | `SMTP_USER` / `SMTP_PASS` | No | Credenciales SMTP, si el servidor las pide. |
 | `MAIL_FROM` | Si | Remitente, por ejemplo `Urea Scania <reportes@tu-dominio.com>`. |
-| `MAIL_TO` | No | Destinatarios separados por coma. Se usan si la tabla `recipients` no tiene activos. |
+| `MAIL_TO` | No | Destinatarios separados por coma. Se usan si la tabla `urea_recipients` no tiene activos. |
 | `CRON_SECRET` | Si usas el endpoint de Vercel | Token que protege `/api/cron/urea-report`. Sin él, el endpoint responde siempre 401. |
 | `THRESHOLD_CRITICAL` | No (`20`) | Umbral de CRITICO. Debe ser <= `THRESHOLD_LOW`. |
 | `THRESHOLD_LOW` | No (`35`) | Umbral de BAJO. |
@@ -85,16 +85,16 @@ npm run report:dry  # consulta Scania y muestra el correo en consola, sin enviar
 npm run report      # ejecución real: guarda en Supabase y envía el correo
 ```
 
-Con `--dry-run` no se envía correo ni se escriben lecturas. Si Supabase está configurado, sí se registra una fila en `job_runs` con detalle `dry-run`.
+Con `--dry-run` no se envía correo ni se escriben lecturas. Si Supabase está configurado, sí se registra una fila en `urea_job_runs` con detalle `dry-run`.
 
 ## 6. Despliegue en Vercel + Supabase
 
-**a) Base de datos.** En el SQL Editor de Supabase ejecuta `supabase/migrations/001_init.sql`. Crea las tablas `vehicles`, `urea_readings`, `recipients` y `job_runs`, activa RLS sin políticas (solo accede la service role) y crea los índices.
+**a) Base de datos.** En el SQL Editor de Supabase ejecuta `supabase/migrations/001_init.sql`. Crea las tablas `urea_vehicles`, `urea_readings`, `urea_recipients` y `urea_job_runs`, activa RLS sin políticas (solo accede la service role) y crea los índices.
 
 Añade los destinatarios (la tabla solo envía a los filas con `active = true`):
 
 ```sql
-insert into recipients (email) values ('reportes@tu-dominio.com');
+insert into urea_recipients (email) values ('reportes@tu-dominio.com');
 ```
 
 **b) Variables en Vercel.** En Project > Settings > Environment Variables agrega las variables de la sección 4 (como mínimo `SCANIA_CLIENT_ID`, `SCANIA_SECRET_KEY`, `MAIL_FROM`, `RESEND_API_KEY` o SMTP, `CRON_SECRET`, y `SUPABASE_URL` con `SUPABASE_SERVICE_ROLE_KEY` si usas histórico).
@@ -154,7 +154,7 @@ tests/                      Pruebas con vitest
 
 Sin Supabase no hay histórico: cada ejecución usa un repositorio en memoria, la variación respecto a la lectura anterior queda vacía y la lista de destinatarios sale de `MAIL_TO`.
 
-El sistema evita ejecuciones solapadas: si hay un registro `running` de hace menos de 10 minutos en `job_runs`, la nueva ejecución se omite (`status: skipped`).
+El sistema evita ejecuciones solapadas: si hay un registro `running` de hace menos de 10 minutos en `urea_job_runs`, la nueva ejecución se omite (`status: skipped`).
 
 ## 9. Supuestos y riesgos
 

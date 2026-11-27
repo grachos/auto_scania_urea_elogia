@@ -56,7 +56,7 @@ export function supabaseRepo(url: string, key: string): Repo {
   return {
     async upsertVehicles(v) {
       if (!v.length) return;
-      check((await db.from('vehicles').upsert(v.map((x) => ({ vin: x.vin, plate: x.plate, name: x.name ?? null, updated_at: new Date().toISOString() })), { onConflict: 'vin' })).error, 'upsert vehicles');
+      check((await db.from('urea_vehicles').upsert(v.map((x) => ({ vin: x.vin, plate: x.plate, name: x.name ?? null, updated_at: new Date().toISOString() })), { onConflict: 'vin' })).error, 'upsert vehicles');
     },
     async insertReadings(rs) {
       const rows = rs.filter(hasData).map((r) => ({ vin: r.vin, urea_level: r.ureaLevel, fuel_level: r.fuelLevel, received_at: r.receivedAt, lat: r.lat, lon: r.lon, odometer_m: r.odometerM }));
@@ -79,22 +79,22 @@ export function supabaseRepo(url: string, key: string): Repo {
       return out;
     },
     async getRecipients() {
-      const { data, error } = await db.from('recipients').select('email').eq('active', true);
+      const { data, error } = await db.from('urea_recipients').select('email').eq('active', true);
       check(error, 'get recipients');
       return (data ?? []).map((r) => r.email as string);
     },
     async startRun(now = new Date()) {
       // Not atomic (read-then-insert); acceptable for a 4-hourly cron.
       const since = new Date(now.getTime() - LOCK_MS).toISOString();
-      const { data, error } = await db.from('job_runs').select('id').eq('status', 'running').gt('started_at', since).limit(1);
+      const { data, error } = await db.from('urea_job_runs').select('id').eq('status', 'running').gt('started_at', since).limit(1);
       check(error, 'check lock');
       if (data?.length) return null;
-      const ins = await db.from('job_runs').insert({ status: 'running', started_at: now.toISOString() }).select('id').single();
+      const ins = await db.from('urea_job_runs').insert({ status: 'running', started_at: now.toISOString() }).select('id').single();
       check(ins.error, 'start run');
       return ins.data!.id as string;
     },
     async finishRun(id, status, detail) {
-      check((await db.from('job_runs').update({ status, detail: detail?.slice(0, 1000) ?? null, finished_at: new Date().toISOString() }).eq('id', id)).error, 'finish run');
+      check((await db.from('urea_job_runs').update({ status, detail: detail?.slice(0, 1000) ?? null, finished_at: new Date().toISOString() }).eq('id', id)).error, 'finish run');
     },
   };
 }
