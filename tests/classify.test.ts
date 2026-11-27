@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { classify, isStale } from '../src/report/classify.js';
 
-const t = { critical: 20, low: 35 };
+const t = { critical: 50, low: 70 };
 describe('classify', () => {
-  it.each([[19.99, 'CRITICO'], [20, 'BAJO'], [34.99, 'BAJO'], [35, 'OK'], [null, 'SIN_DATO']] as const)('%s -> %s', (l, s) => {
+  it.each([[49.99, 'ROJO'], [50, 'ROJO'], [50.01, 'AMARILLO'], [70, 'AMARILLO'], [70.01, 'VERDE'], [null, 'SIN_DATO']] as const)('%s -> %s', (l, s) => {
     expect(classify(l, t)).toBe(s);
   });
   it('stale after 24h', () => {

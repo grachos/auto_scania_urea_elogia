@@ -10,12 +10,13 @@ Cada 4 horas el proceso:
 2. Guarda el histórico en Supabase (tablas `urea_vehicles` y `urea_readings`), si Supabase está configurado.
 3. Clasifica cada camión según los umbrales configurados y envía un correo HTML a los destinatarios:
 
-| Estado | Condición (con valores por defecto) |
+| Color | Condición (con valores por defecto) |
 |---|---|
-| `CRITICO` | nivel < 20 % (`THRESHOLD_CRITICAL`) |
-| `BAJO` | 20 % <= nivel < 35 % (`THRESHOLD_LOW`) |
-| `OK` | nivel >= 35 % |
-| `SIN_DATO` | el camión no reporta `catalystFuelLevel` |
+| `ROJO` | nivel <= 50 % (`THRESHOLD_CRITICAL`) |
+| `AMARILLO` | 50 % < nivel <= 70 % (`THRESHOLD_LOW`) |
+| `VERDE` | nivel > 70 % |
+
+Solo se incluyen los camiones que reportan nivel de urea; los que no lo reportan se omiten (el correo indica cuántos). El correo muestra primero "Requieren atención" (solo rojos, con columna Observación) y luego "Resto de la flota" (amarillos y verdes). El asunto es `[Urea Scania] N requieren atención – dd/mm HH:mm`.
 
 El correo incluye la variación respecto a la lectura anterior y marca como desactualizado un dato con más de 24 h de antigüedad. Si la consulta a Scania falla, se envía un correo de alerta con el error.
 
@@ -59,8 +60,8 @@ Plantilla completa en `.env.example` (solo contiene valores de ejemplo). Resumen
 | `MAIL_FROM` | Si | Remitente, por ejemplo `Urea Scania <reportes@tu-dominio.com>`. |
 | `MAIL_TO` | No | Destinatarios separados por coma. Se usan si la tabla `urea_recipients` no tiene activos. |
 | `CRON_SECRET` | Si usas el endpoint de Vercel | Token que protege `/api/cron/urea-report`. Sin él, el endpoint responde siempre 401. |
-| `THRESHOLD_CRITICAL` | No (`20`) | Umbral de CRITICO. Debe ser <= `THRESHOLD_LOW`. |
-| `THRESHOLD_LOW` | No (`35`) | Umbral de BAJO. |
+| `THRESHOLD_CRITICAL` | No (`50`) | Umbral de ROJO (inclusivo). Debe ser <= `THRESHOLD_LOW`. |
+| `THRESHOLD_LOW` | No (`70`) | Umbral de AMARILLO (inclusivo). |
 | `TZ_REPORT` | No (`America/Bogota`) | Zona horaria para las fechas del correo. |
 
 Notas:
@@ -157,7 +158,7 @@ El sistema evita ejecuciones solapadas: si hay un registro `running` de hace men
 ## 9. Supuestos y riesgos
 
 - **Endpoints de Scania.** Las rutas (`/auth/*`, `/rfms4/vehicles`, `/rfms4/vehiclestatuses?latestOnly=true&contentFilter=SNAPSHOT`) y las cabeceras `Accept` con versión (`vehicles.v4.0`, `vehiclestatuses.v4.0`) están definidas en `src/scania/auth.ts` y `src/scania/rfms.ts`. Verifícalas contra la documentación vigente de Scania antes de desplegar; si cambian, solo hay que editar esos archivos.
-- **Sin dato de AdBlue.** Algunos camiones, sobre todo los más antiguos o sin sensor de urea, no reportan `catalystFuelLevel`. Aparecen como `SIN_DATO` y no se alertan.
+- **Sin dato de AdBlue.** Algunos camiones, sobre todo los más antiguos o sin sensor de urea, no reportan `catalystFuelLevel`. No se incluyen en el correo (solo se cuenta cuántos son).
 - **Lecturas desactualizadas.** Un camión sin reportes recientes puede mostrar un nivel antiguo; el correo lo marca cuando supera 24 h.
 - **Scrape por login HTTP.** Depende del flujo de login de My Scania; si cambia o la cuenta exige MFA, fallará con un error claro.
 - **Operación.** El cron no tiene reintentos propios: si una ejecución falla, se envía el correo de error y se espera a la siguiente ejecución.

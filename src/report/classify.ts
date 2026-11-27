@@ -1,4 +1,4 @@
-export type Status = 'CRITICO' | 'BAJO' | 'OK' | 'SIN_DATO';
+export type Status = 'ROJO' | 'AMARILLO' | 'VERDE' | 'SIN_DATO';
 
 export interface Thresholds { critical: number; low: number }
 
@@ -6,9 +6,9 @@ export const STALE_MS = 24 * 3600 * 1000;
 
 export function classify(level: number | null | undefined, t: Thresholds): Status {
   if (level == null || Number.isNaN(level)) return 'SIN_DATO';
-  if (level < t.critical) return 'CRITICO';
-  if (level < t.low) return 'BAJO';
-  return 'OK';
+  if (level <= t.critical) return 'ROJO';
+  if (level <= t.low) return 'AMARILLO';
+  return 'VERDE';
 }
 
 /** Stale when the last reading is older than 24h (or missing/unparseable). */
