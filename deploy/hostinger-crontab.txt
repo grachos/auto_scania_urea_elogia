@@ -1,3 +1,3 @@
-# Hostinger VPS: every 4 hours (server time). Env vars live in /opt/auto_scania_urea_elogia/.env
-# Install deps once: npm ci && npm run build   (run script uses tsx: npm run report)
-0 */4 * * * cd /opt/auto_scania_urea_elogia && set -a && . ./.env && set +a && /usr/bin/npm run report >> /var/log/urea-report.log 2>&1
+# Hostinger (hPanel > Avanzado > Cron Jobs, o crontab en VPS): dispara el reporte en Vercel cada 4 horas.
+# Reemplaza TU_CRON_SECRET por el mismo valor de la variable CRON_SECRET en Vercel.
+0 */4 * * * curl -fsS -m 90 -H "Authorization: Bearer TU_CRON_SECRET" https://auto-scania-urea-elogia.vercel.app/api/cron/urea-report

@@ -1,4 +1,3 @@
 {
-  "crons": [{ "path": "/api/cron/urea-report", "schedule": "0 */4 * * *" }],
   "functions": { "api/cron/urea-report.ts": { "maxDuration": 60 } }
 }

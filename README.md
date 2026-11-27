@@ -99,18 +99,13 @@ insert into recipients (email) values ('reportes@tu-dominio.com');
 
 **b) Variables en Vercel.** En Project > Settings > Environment Variables agrega las variables de la sección 4 (como mínimo `SCANIA_CLIENT_ID`, `SCANIA_SECRET_KEY`, `MAIL_FROM`, `RESEND_API_KEY` o SMTP, `CRON_SECRET`, y `SUPABASE_URL` con `SUPABASE_SERVICE_ROLE_KEY` si usas histórico).
 
-**c) Cron.** `vercel.json` define:
+**c) Cron en Hostinger.** Vercel no programa el reporte (el plan gratuito no permite cron cada 4 h). El disparo lo hace un Cron Job de Hostinger (hPanel > Avanzado > Cron Jobs) que llama al endpoint, ver `deploy/hostinger-crontab.txt`:
 
-```json
-{
-  "crons": [{ "path": "/api/cron/urea-report", "schedule": "0 */4 * * *" }],
-  "functions": { "api/cron/urea-report.ts": { "maxDuration": 60 } }
-}
+```
+0 */4 * * * curl -fsS -m 90 -H "Authorization: Bearer TU_CRON_SECRET" https://auto-scania-urea-elogia.vercel.app/api/cron/urea-report
 ```
 
-Vercel programa los cron en UTC. `0 */4 * * *` equivale a las 00, 04, 08, 12, 16 y 20 UTC, es decir, a las **19:00, 23:00, 03:00, 07:00, 11:00 y 15:00** en Bogotá (UTC-5). Ten en cuenta que los planes gratuitos de Vercel limitan la frecuencia de los cron; confirma que tu plan permita ejecuciones cada 4 horas.
-
-El endpoint exige `Authorization: Bearer <CRON_SECRET>`. Vercel lo envía automáticamente en las ejecuciones programadas.
+El horario es el del servidor de Hostinger. El endpoint exige `Authorization: Bearer <CRON_SECRET>` (el mismo valor configurado en Vercel).
 
 **d) Disparo manual.** Para probar sin esperar al cron:
 
@@ -120,9 +115,9 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://TU-PROYECTO.vercel.app/api/
 
 La respuesta es `{ "status": "ok" | "skipped" | "error", ... }`. Responde 500 si el resultado es error y 401 si el token no coincide.
 
-## 7. Alternativa: VPS en Hostinger
+## 7. Alternativa: todo en un VPS de Hostinger
 
-El archivo `deploy/hostinger-crontab.txt` contiene la línea de cron para un VPS, que ejecuta cada 4 horas (hora del servidor):
+Si prefieres no usar Vercel, el job puede correr directamente en un VPS cada 4 horas (hora del servidor):
 
 ```
 0 */4 * * * cd /opt/auto_scania_urea_elogia && set -a && . ./.env && set +a && /usr/bin/npm run report >> /var/log/urea-report.log 2>&1
