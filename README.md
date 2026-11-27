@@ -21,12 +21,12 @@ El correo incluye la variación respecto a la lectura anterior y marca como desa
 
 ## 2. Por qué la API oficial y no el login web
 
-Se usa la API oficial rFMS (`SOURCE=rfms`, valor por defecto) porque:
+La fuente por defecto es `SOURCE=scrape`: login HTTP puro a My Scania (sin navegador). La API oficial rFMS (`SOURCE=rfms`) sigue disponible. Contexto:
 
 - Los `session_code`, `execution` y `tab_id` del login de Keycloak (`mylogin.scania.com`) son de un solo uso, así que no se pueden reutilizar ni capturar para hacer peticiones directas.
 - El scraping del portal es frágil: el login puede pedir MFA/OTP y cualquier cambio en el DOM rompe la extracción.
 
-El modo `SOURCE=scrape` (Playwright contra `my.scania.com`) existe solo como alternativa para el VPS. Hoy no funciona sin configuración adicional: los selectores de `src/sources/scrapeSource.ts` (`SEL.vin`, `SEL.plate`, `SEL.urea`) están vacíos y el código lanza el error "selectors not configured". Además, si la cuenta tiene MFA, el login automático falla.
+`SOURCE=scrape` (`src/sources/myScaniaSource.ts`) hace el login de Keycloak (PKCE, dos páginas: email y luego usuario/contraseña) con `fetch` y una jar de cookies por ruta, intercambia el código por un token y consulta `fleetposition`. No usa Playwright, por lo que funciona en Vercel. Si la cuenta exige MFA/OTP u otra acción, el login falla con un error que indica la página devuelta.
 
 Autenticación rFMS (`src/scania/auth.ts`): se pide un challenge a `/auth/clientid2challenge`, se calcula `response = base64url(HMAC-SHA256(secretKey, challenge))` y se intercambia por un token en `/auth/response2token`. El token se renueva con `/auth/refreshtoken` y se vuelve a autenticar si expira o responde 401.
 
@@ -44,11 +44,11 @@ Plantilla completa en `.env.example` (solo contiene valores de ejemplo). Resumen
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
-| `SOURCE` | No (`rfms`) | `rfms` o `scrape`. |
+| `SOURCE` | No (`scrape`) | `scrape` (login HTTP a My Scania) o `rfms`. |
 | `SCANIA_CLIENT_ID` | Si `SOURCE=rfms` | clientId de My Scania > API access. |
 | `SCANIA_SECRET_KEY` | Si `SOURCE=rfms` | secretKey de My Scania > API access. |
 | `SCANIA_BASE_URL` | No (`https://dataaccess.scania.com`) | URL base de la API. |
-| `MYSCANIA_USER` / `MYSCANIA_PASS` | Si `SOURCE=scrape` | Credenciales del portal web. |
+| `MYSCANIA_USER` / `MYSCANIA_PASS` | Si `SOURCE=scrape` | Credenciales de My Scania (login HTTP, funciona en Vercel). |
 | `SUPABASE_URL` | No | URL del proyecto. Debe definirse junto con la clave, o ninguna de las dos. |
 | `SUPABASE_SERVICE_ROLE_KEY` | No | Clave service role (salta RLS). Nunca exponerla en el cliente. |
 | `MAIL_PROVIDER` | No (`resend`) | `resend` o `smtp`. |
@@ -69,7 +69,6 @@ Notas:
 - Si alguna contraseña o clave se compartió en texto plano (chat, correo, capturas), rótala.
 - El código no carga `.env` por sí mismo: hay que exportar las variables (ver la sección 5 o el crontab del VPS).
 - En `.env`, valores con espacios o caracteres como `<` deben ir entre comillas (por ejemplo `MAIL_FROM="Urea Scania <reportes@tu-dominio.com>"`), porque el VPS carga el archivo con `. ./.env` y sin comillas bash lo interpreta mal.
-- `MYSCANIA_FLEET_URL` y `MYSCANIA_ROW_SELECTOR` se leen directamente de `process.env` en el modo scrape. No están en `.env.example`.
 
 ## 5. Instalación local y pruebas
 
@@ -128,9 +127,8 @@ Pasos:
 1. Clona el repositorio en `/opt/auto_scania_urea_elogia`.
 2. Crea `/opt/auto_scania_urea_elogia/.env` con las variables de la sección 4 (con las comillas indicadas).
 3. Instala dependencias una vez: `npm ci && npm run build`. `npm run report` usa `tsx`, que está en devDependencies, por lo que `npm ci` debe instalarlo.
-4. Si usas `SOURCE=scrape`, instala Playwright: `npm i playwright && npx playwright install chromium`.
-5. Añade la línea anterior con `crontab -e`.
-6. Revisa el resultado en `/var/log/urea-report.log`.
+4. Añade la línea anterior con `crontab -e`.
+5. Revisa el resultado en `/var/log/urea-report.log`.
 
 ## 8. Estructura del proyecto
 
@@ -143,7 +141,7 @@ src/runReport.ts            Flujo principal: consulta, guarda, clasifica, envía
 src/scania/auth.ts          Autenticación HMAC y renovación de token rFMS
 src/scania/client.ts        Cliente HTTP con reintentos (429 y 5xx) y reautenticación (401)
 src/scania/rfms.ts          Paginación y mapeo de vehicles/vehiclestatuses a lecturas
-src/sources/                rfmsSource (API), scrapeSource (Playwright, incompleto)
+src/sources/                rfmsSource (API), myScaniaSource (login HTTP a My Scania)
 src/db/repo.ts              Repositorio Supabase y repositorio en memoria (sin Supabase)
 src/mail/index.ts           Envío con Resend o SMTP (nodemailer)
 src/report/                 Clasificación de estados y HTML del correo
@@ -161,6 +159,6 @@ El sistema evita ejecuciones solapadas: si hay un registro `running` de hace men
 - **Endpoints de Scania.** Las rutas (`/auth/*`, `/rfms4/vehicles`, `/rfms4/vehiclestatuses?latestOnly=true&contentFilter=SNAPSHOT`) y las cabeceras `Accept` con versión (`vehicles.v4.0`, `vehiclestatuses.v4.0`) están definidas en `src/scania/auth.ts` y `src/scania/rfms.ts`. Verifícalas contra la documentación vigente de Scania antes de desplegar; si cambian, solo hay que editar esos archivos.
 - **Sin dato de AdBlue.** Algunos camiones, sobre todo los más antiguos o sin sensor de urea, no reportan `catalystFuelLevel`. Aparecen como `SIN_DATO` y no se alertan.
 - **Lecturas desactualizadas.** Un camión sin reportes recientes puede mostrar un nivel antiguo; el correo lo marca cuando supera 24 h.
-- **Scrape incompleto.** El modo `SOURCE=scrape` no funciona hasta completar los selectores y puede fallar con MFA.
+- **Scrape por login HTTP.** Depende del flujo de login de My Scania; si cambia o la cuenta exige MFA, fallará con un error claro.
 - **Operación.** El cron no tiene reintentos propios: si una ejecución falla, se envía el correo de error y se espera a la siguiente ejecución.
 - **Sin pruebas contra producción.** Las pruebas unitarias (`npm test`) no llaman a Scania ni a Supabase; el primer `npm run report:dry` con credenciales reales es la verificación de integración.

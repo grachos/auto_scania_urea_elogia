@@ -22,7 +22,7 @@ const schema = z
     THRESHOLD_CRITICAL: z.preprocess(emptyToUndef, z.coerce.number().default(20)),
     THRESHOLD_LOW: z.preprocess(emptyToUndef, z.coerce.number().default(35)),
     TZ_REPORT: z.preprocess(emptyToUndef, z.string().default('America/Bogota')),
-    SOURCE: z.preprocess(emptyToUndef, z.enum(['rfms', 'scrape']).default('rfms')),
+    SOURCE: z.preprocess(emptyToUndef, z.enum(['rfms', 'scrape']).default('scrape')),
     MYSCANIA_USER: opt(z.string()),
     MYSCANIA_PASS: opt(z.string()),
   })
