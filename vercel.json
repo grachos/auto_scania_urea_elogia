@@ -1,0 +1,5 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "functions": { "api/cron/urea-report.ts": { "maxDuration": 60 } }
+}
