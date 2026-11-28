@@ -8,7 +8,7 @@ const res = () => {
   return r;
 };
 const run = vi.fn(async () => ({ status: 'ok' as const, rows: [] }));
-const h = createHandler(() => ({}) as any, run, () => 's3cret');
+const h = createHandler(() => ({}) as any, run, () => 's3cret', () => true);
 
 describe('cron handler', () => {
   it('401 without or with wrong bearer', async () => {
