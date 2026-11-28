@@ -1,3 +1,3 @@
-# Hostinger (hPanel > Avanzado > Cron Jobs, o crontab en VPS): dispara el reporte en Vercel cada 4 horas.
+# Hostinger (hPanel > Avanzado > Cron Jobs, o crontab en VPS): dispara el reporte en Vercel cada hora; el endpoint solo envía en las horas de REPORT_HOURS (hora de Bogotá).
 # Reemplaza TU_CRON_SECRET por el mismo valor de la variable CRON_SECRET en Vercel.
-0 */4 * * * curl -fsS -m 90 -H "Authorization: Bearer TU_CRON_SECRET" https://autoscaniaureaelogia.vercel.app/api/cron/urea-report
+0 * * * * curl -fsS -m 90 -H "Authorization: Bearer TU_CRON_SECRET" https://autoscaniaureaelogia.vercel.app/api/cron/urea-report

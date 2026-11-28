@@ -102,10 +102,12 @@ insert into urea_recipients (email) values ('reportes@tu-dominio.com');
 **c) Cron en Hostinger.** Vercel no programa el reporte (el plan gratuito no permite cron cada 4 h). El disparo lo hace un Cron Job de Hostinger (hPanel > Avanzado > Cron Jobs) que llama al endpoint, ver `deploy/hostinger-crontab.txt`:
 
 ```
-0 */4 * * * curl -fsS -m 90 -H "Authorization: Bearer TU_CRON_SECRET" https://autoscaniaureaelogia.vercel.app/api/cron/urea-report
+0 * * * * curl -fsS -m 90 -H "Authorization: Bearer TU_CRON_SECRET" https://autoscaniaureaelogia.vercel.app/api/cron/urea-report
 ```
 
-El horario es el del servidor de Hostinger. El endpoint exige `Authorization: Bearer <CRON_SECRET>` (el mismo valor configurado en Vercel).
+
+El cron de Hostinger corre **cada hora** porque su reloj no está en hora de Colombia. El endpoint solo envía el reporte cuando la hora en `TZ_REPORT` (Bogotá) está en `REPORT_HOURS` (por defecto `0,4,8,12,16,20`); en las demás responde `{"status":"skipped"}` sin consultar Scania. Para forzar un envío manual añade `?force=1` a la URL.
+El endpoint exige `Authorization: Bearer <CRON_SECRET>` (el mismo valor configurado en Vercel).
 
 **d) Disparo manual.** Para probar sin esperar al cron:
 
